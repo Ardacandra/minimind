@@ -36,6 +36,7 @@ class MiniMindConfig(PretrainedConfig):
             scoring_func: str = 'softmax',
             aux_loss_alpha: float = 0.01,
             seq_aux: bool = True,
+                gating_temperature: float = 1.0,
             norm_topk_prob: bool = True,
             **kwargs
     ):
@@ -76,6 +77,7 @@ class MiniMindConfig(PretrainedConfig):
         self.aux_loss_alpha = aux_loss_alpha  # 辅助损失的alpha参数
         self.seq_aux = seq_aux  # 是否在序列级别上计算辅助损失
         self.norm_topk_prob = norm_topk_prob  # 是否标准化top-k概率
+        self.gating_temperature = gating_temperature  # temperature to scale gating logits before softmax
 
 
 # 📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘📘
@@ -241,6 +243,8 @@ class MoEGate(nn.Module):
         self.seq_aux = config.seq_aux
 
         self.norm_topk_prob = config.norm_topk_prob
+        # gating temperature (used to scale logits before softmax)
+        self.temperature = getattr(config, 'gating_temperature', 1.0)
         self.gating_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, self.gating_dim)))
         self.reset_parameters()
@@ -252,6 +256,9 @@ class MoEGate(nn.Module):
         bsz, seq_len, h = hidden_states.shape
         hidden_states = hidden_states.view(-1, h)
         logits = F.linear(hidden_states, self.weight, None)
+        # apply temperature scaling to gating logits for control over sparsity
+        temp = max(float(self.temperature), 1e-6)
+        logits = logits / temp
         if self.scoring_func == 'softmax':
             scores = logits.softmax(dim=-1)
         else:
