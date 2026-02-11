@@ -2,3 +2,9 @@ model/__pycache__
 out
 website/
 docs-minimind/
+MiniMind2/
+trainer/
+dataset/
+checkpoints/
+tc2_jobscript.sh
+logs_tc2/
